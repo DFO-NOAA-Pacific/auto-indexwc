@@ -13,6 +13,7 @@ config_data <- dplyr::filter(config_data,
 #[7] "stripetail rockfish"   "yelloweye rockfish"    "yellowtail rockfish"
 
 # Use the surveyjoin data
+surveyjoin::cache_data()
 surveyjoin::load_sql_data()
 dat <- surveyjoin::get_data()
 
