@@ -1,0 +1,49 @@
+on:
+  schedule:
+      # * is a special character in YAML so you have to quote this string
+    - cron:  '0 0 2 1,4,7,10 *'
+  push:
+       paths:
+       - 'code/02_calculate_indices_a.R'
+
+    #branches: [main, master]
+  #pull_request:
+    #branches: [main, master]
+
+name: R-run-models1
+
+jobs:
+  run-models:
+    runs-on: macos-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+
+      - name: "[Custom block] [macOS] Install spatial libraries"
+        if: runner.os == 'macOS'
+        run: |
+          # conflicts with gfortran from r-lib/actions when linking gcc
+          rm '/usr/local/bin/gfortran'
+          brew install pkg-config gdal proj geos sqlite3
+
+      - name: Install packages
+        run:
+          Rscript -e "install.packages(c('remotes','dplyr', 'sdmTMB', 'stringr'))"
+
+      - name: Install indexwc for prediction grid
+        run:
+          Rscript -e "remotes::install_github('pfmc-assessments/indexwc')"
+
+      - name: Run SDMs
+        run:
+          Rscript -e "source('code/02_calculate_indices_a.R')"
+
+      - name: Commit results
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git diff-index --quiet HEAD || (git commit -a -m'[bot] update files' --allow-empty && git push -f)
+
