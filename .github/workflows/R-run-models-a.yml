@@ -32,7 +32,7 @@ jobs:
 
       - name: Install packages
         run:
-          Rscript -e "install.packages(c('remotes','dplyr', 'sdmTMB', 'stringr', 'lubridate'))"
+          Rscript -e "install.packages(c('remotes','dplyr', 'dbplyr', 'sdmTMB', 'stringr', 'lubridate'))"
 
       - name: Install surveyjoin
         run:
