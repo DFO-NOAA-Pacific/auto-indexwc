@@ -31,6 +31,7 @@ dat <- dplyr::rename(dat, latitude_dd = lat_start,
                      longitude_dd = lon_start) |>
   dplyr::filter(!is.na(longitude_dd),
                 !is.na(latitude_dd))
+
 # filter fields for smaller file size
 dat <- dplyr::select(dat,
   #event_id,
@@ -44,4 +45,4 @@ dat <- dplyr::select(dat,
   longitude_dd,
   latitude_dd
 )
-saveRDS(dat, "data/wcgbts.rds")
+#saveRDS(dat, "data/wcgbts.rds")

@@ -4,6 +4,7 @@ on:
     - cron:  '0 0 2 1,4,7,10 *'
   push:
        paths:
+       - 'code/01_get_data.R'
        - 'code/02_calculate_indices_a.R'
 
     #branches: [main, master]
@@ -31,13 +32,17 @@ jobs:
 
       - name: Install packages
         run:
-          Rscript -e "install.packages(c('remotes','dplyr', 'sdmTMB', 'stringr'))"
+          Rscript -e "install.packages(c('remotes','dplyr', 'sdmTMB', 'stringr', 'lubridate'))"
 
-      - name: Install indexwc for prediction grid
+      - name: Install surveyjoin
         run:
-          Rscript -e "remotes::install_github('pfmc-assessments/indexwc')"
+          Rscript -e "remotes::install_github('DFO-NOAA-Pacific/surveyjoin', ref='gh-actions')"
 
-      - name: Run SDMs
+      - name: Load data from surveyjoin
+        run:
+          Rscript -e "source('code/01_get_data.R')"
+
+      - name: Run SDMs with sdmTMB
         run:
           Rscript -e "source('code/02_calculate_indices_a.R')"
 

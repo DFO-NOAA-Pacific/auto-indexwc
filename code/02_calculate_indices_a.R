@@ -1,10 +1,9 @@
 library(dplyr)
 library(sdmTMB)
 library(stringr)
-library(indexwc)
 
 run_num <- 1
-
+crs_out <- 32610
 # Load configuration data
 url <- "https://raw.githubusercontent.com/pfmc-assessments/indexwc/main/data-raw/configuration.csv"
 config_data <- read.csv(url, stringsAsFactors = FALSE)
@@ -29,20 +28,30 @@ dat <- readRDS("data/wcgbts.rds")
 # add X, Y
 dat <- sdmTMB::add_utm_columns(dat,
                                ll_names = c("longitude_dd","latitude_dd"),
-                               utm_crs = 32610)
+                               utm_crs = crs_out)
 
 # Filter config data down based on available species
 spp <- unique(dat$common_name)
 config_data <- config_data[which(spp%in%config_data$species),]
 
 # divide spp into thirds for GH actions
-sp <- rep(1:3, length(spp))[1:length(spp)]
-indx <- which(sp == run_num)
+#sp <- rep(1:3, length(spp))[1:length(spp)]
+# indx <- which(sp == run_num)
+indx <- which(config_data$species=="arrowtooth flounder")
+
+# create dummy files initially
+# for (i in 1:nrow(config_data)) {
+#   sub <- dplyr::filter(dat, common_name == config_data$species[i])
+#   file.create(
+#         paste0("output/",
+#                sub$common_name[1],"_",
+#                config_data$index_id[i],".rds"))
+# }
 
 for (i in 1:length(indx)) {
 
-  sub <- dplyr::filter(dat, common_name == spp[indx[i]]) |>
-    dplyr::mutate(zday = (yday - mean(sub$yday)) / sd(sub$yday))
+  sub <- dplyr::filter(dat, common_name == spp[indx[i]])
+  sub <- dplyr::mutate(sub, zday = (yday - mean(sub$yday)) / sd(sub$yday))
   # apply the year, latitude, and depth filters if used
   sub <- dplyr::filter(sub,
                        latitude_dd >= config_data$min_latitude[i],
@@ -58,7 +67,10 @@ for (i in 1:length(indx)) {
   sub$fyear <- as.factor(sub$year) # year as factor
 
   # fit the model using arguments in configuration file
-  fit <- sdmTMB(formula = as.formula(config_data$formula[i]),
+  # initialize to NULL and wrap in try() to avoid
+  # 'system is computationally singular' errors
+  fit <- NULL
+  fit <- try(sdmTMB(formula = as.formula(config_data$formula[i]),
                 time = "year",
                 offset = log(sub$effort),
                 mesh = mesh,
@@ -68,73 +80,81 @@ for (i in 1:length(indx)) {
                                     config_data$spatiotemporal2[i]),
                 anisotropy = config_data$anisotropy[i],
                 family = get(config_data$family[i])(),
-                share_range = config_data$share_range[i])
+                share_range = config_data$share_range[i]), silent = TRUE)
 
-  san <- sanity(fit, silent=TRUE)
-  saveRDS(san, file=paste0("diagnostics/sanity_",
-                           config_data$index[i], ".rds"))
+  if(class(fit) == "sdmTMB") {
+      san <- sanity(fit, silent=TRUE)
+      saveRDS(san, file=paste0("diagnostics/sanity_",
+                               config_data$index[i], ".rds"))
 
-  # make predictions
-  wcgbts_grid <- indexwc::california_current_grid
-  # first filter the grid like with the data
-  wcgbts_grid <- dplyr::filter(wcgbts_grid,
-                               latitude >= config_data$min_latitude[i],
-                               latitude < config_data$max_latitude[i],
-                               depth >= config_data$min_depth[i],
-                               depth < config_data$max_depth[i],
-                               area_km2_WCGBTS > 0)
-  # Add calendar date -- predicting to jul 1
-  wcgbts_grid$zday <- (182 - mean(sub$yday)) / sd(sub$yday)
-  # add X-Y
-  wcgbts_grid <- sdmTMB::add_utm_columns(wcgbts_grid,
-                                         ll_names = c("longitude","latitude"),
-                                         utm_crs = 32610)
+      # make predictions
+      wcgbts_grid <- surveyjoin::nwfsc_grid
+      # first filter the grid like with the data
+      wcgbts_grid <- dplyr::filter(wcgbts_grid,
+                                   lat >= config_data$min_latitude[i],
+                                   lat < config_data$max_latitude[i],
+                                   depth_m >= config_data$min_depth[i],
+                                   depth_m < config_data$max_depth[i],
+                                   area > 0)
+      # Add calendar date -- predicting to jul 1
+      wcgbts_grid$zday <- (182 - mean(sub$yday)) / sd(sub$yday)
+      # add X-Y
+      wcgbts_grid <- sdmTMB::add_utm_columns(wcgbts_grid,
+                                             ll_names = c("lon","lat"),
+                                             utm_crs = crs_out)
 
-  # replicate grid
-  wcgbts_grid <- replicate_df(wcgbts_grid, time_name = "year",
-                              time_values = unique(sub$year))
-  wcgbts_grid$fyear <- as.factor(wcgbts_grid$year)
+      # replicate grid
+      wcgbts_grid <- replicate_df(wcgbts_grid, time_name = "year",
+                                  time_values = unique(sub$year))
+      wcgbts_grid$fyear <- as.factor(wcgbts_grid$year)
 
-  # convert area from km2 to ha
-  wcgbts_grid$area_ha <- wcgbts_grid$area_km2_WCGBTS * 100
+      # Make coastwide index
+      pred_all <- predict(fit, wcgbts_grid, return_tmb_object = TRUE)
+      index_all <- get_index(pred_all,
+                             area = wcgbts_grid$area,
+                             bias_correct = TRUE)
+      index_all$index <- "Coastwide"
 
-  # Make coastwide index
-  pred_all <- predict(fit, wcgbts_grid, return_tmb_object = TRUE)
-  index_all <- get_index(pred_all,
-                         area = wcgbts_grid$area_ha,
-                         bias_correct = TRUE)
-  index_all$index <- "Coastwide"
+      process_region <- function(region_code, region_name) {
+        sub_grid <- dplyr::filter(as.data.frame(wcgbts_grid), split_state == region_code)
 
-  # make indices for California
-  sub_grid <- dplyr::filter(as.data.frame(wcgbts_grid), split_state=="C")
-  pred <- predict(fit, sub_grid, return_tmb_object = TRUE)
-  index_CA <- get_index(pred,
-                        area = sub_grid$area_ha,
-                        bias_correct = TRUE)
-  index_CA$index <- "California"
+        if (nrow(sub_grid) > 0) {
+          pred <- predict(fit, sub_grid, return_tmb_object = TRUE)
+          index <- get_index(pred, area = sub_grid$area, bias_correct = TRUE)
+          index$index <- region_name
+        } else {
+          index <- data.frame(
+            year = sort(unique(wcgbts_grid$year)),
+            est = NA,
+            lwr = NA,
+            upr = NA,
+            log_est = NA,
+            se = NA,
+            type = "index",
+            index = region_name
+          )
+        }
 
-  # make indices for Oregon
-  sub_grid <- dplyr::filter(as.data.frame(wcgbts_grid), split_state=="O")
-  pred <- predict(fit, sub_grid, return_tmb_object = TRUE)
-  index_OR <- get_index(pred,
-                        area = sub_grid$area_ha,
-                        bias_correct = TRUE)
-  index_OR$index <- "Oregon"
+        return(index)
+      }
 
-  # make indices for Oregon
-  sub_grid <- dplyr::filter(as.data.frame(wcgbts_grid), split_state=="W")
-  pred <- predict(fit, sub_grid, return_tmb_object = TRUE)
-  index_WA <- get_index(pred,
-                        area = sub_grid$area_ha,
-                        bias_correct = TRUE)
-  index_WA$index <- "Washington"
+      index_CA <- process_region(region_code = "C",
+                                 region_name = "California")
+      index_OR <- process_region(region_code = "O",
+                                 region_name = "Oregon")
+      index_WA <- process_region(region_code = "W",
+                                 region_name = "Washington")
 
-  indices <- rbind(index_all, index_CA, index_OR, index_WA)
-  indices$index_id <- config_data$index[i]
-  indices$common_name <- sub$common_name[1]
-  saveRDS(indices,
-          paste0("output/",
-                 sub$common_name[1],"_",
-                 config_data$index_id[i],".rds"))
+      indices <- rbind(index_all, index_CA, index_OR, index_WA)
+      indices$index_id <- config_data$index[i]
+      indices$common_name <- sub$common_name[1]
+
+      attr(indices, "date") <- Sys.Date()
+
+      saveRDS(indices,
+              paste0("output/",
+                     sub$common_name[1],"_",
+                     config_data$index_id[i],".rds"))
+  }
 }
 
