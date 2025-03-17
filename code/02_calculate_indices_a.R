@@ -25,7 +25,7 @@ config_data$family <- str_replace(config_data$family, "sdmTMB::", "")
 config_data$family <- str_replace(config_data$family, "\\(\\)", "")
 
 # Load data
-dat <- readRDS("data/wcgbts.rds")
+#dat <- readRDS("data/wcgbts.rds")
 # add X, Y
 dat <- sdmTMB::add_utm_columns(dat,
                                ll_names = c("longitude_dd","latitude_dd"),
