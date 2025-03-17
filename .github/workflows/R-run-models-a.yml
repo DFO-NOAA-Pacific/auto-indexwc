@@ -38,10 +38,6 @@ jobs:
         run:
           Rscript -e "remotes::install_github('DFO-NOAA-Pacific/surveyjoin', ref='gh-actions')"
 
-      - name: Load data from surveyjoin
-        run:
-          Rscript -e "source('code/01_get_data.R')"
-
       - name: Run SDMs with sdmTMB
         run:
           Rscript -e "source('code/02_calculate_indices_a.R')"
