@@ -5,6 +5,11 @@ library(sdmTMB)
 library(stringr)
 library(dbplyr)
 
+num_batches <- 8
+# Read the batch number passed from GitHub Action
+args <- commandArgs(trailingOnly = TRUE)
+current_batch <- as.numeric(args[1]) # This gets the batch number
+
 url <- "https://raw.githubusercontent.com/pfmc-assessments/indexwc/main/data-raw/configuration.csv"
 config_data <- read.csv(url, stringsAsFactors = FALSE)
 config_data <- dplyr::filter(config_data,
@@ -62,7 +67,6 @@ dat <- dplyr::select(dat,
                      latitude_dd
 )
 
-run_num <- 1
 crs_out <- 32610
 
 # Load data
@@ -74,25 +78,23 @@ dat <- sdmTMB::add_utm_columns(dat,
 
 # Filter config data down based on available species
 spp <- unique(dat$common_name)
-config_data <- config_data[which(spp%in%config_data$species),]
+spp <- spp[which(spp%in%config_data$species)]
+config_data <- dplyr::filter(config_data, tolower(species) %in% spp)
 
-# divide spp into thirds for GH actions
-#sp <- rep(1:3, length(spp))[1:length(spp)]
-# indx <- which(sp == run_num)
-indx <- which(config_data$species=="arrowtooth flounder")
+# Assign batch numbers in a round-robin fashion
+config_data$batch <- rep(1:num_batches, length.out = nrow(config_data))
+# Filter out only focal batch
+config_data <- dplyr::filter(config_data, batch == current_batch)
 
-# create dummy files initially
-# for (i in 1:nrow(config_data)) {
-#   sub <- dplyr::filter(dat, common_name == config_data$species[i])
-#   file.create(
-#         paste0("output/",
-#                sub$common_name[1],"_",
-#                config_data$index_id[i],".rds"))
-# }
+library(future)
+library(future.apply)
 
-for (i in 1:length(indx)) {
+# Plan for parallelization (adjust number of workers as needed)
+plan(multisession, workers = parallel::detectCores() - 1)
 
-  sub <- dplyr::filter(dat, common_name == spp[indx[i]])
+#for (i in 1:nrow(config_data)) {
+process_species <- function(i) {
+  sub <- dplyr::filter(dat, common_name == unique(tolower(config_data$species[i])))
   sub <- dplyr::mutate(sub, zday = (yday - mean(sub$yday)) / sd(sub$yday))
   # apply the year, latitude, and depth filters if used
   sub <- dplyr::filter(sub,
@@ -200,3 +202,5 @@ for (i in 1:length(indx)) {
   }
 }
 
+# Apply process_species in parallel
+future_lapply(1:nrow(config_data), process_species)
