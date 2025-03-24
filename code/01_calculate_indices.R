@@ -127,6 +127,13 @@ process_species <- function(i) {
                 share_range = config_data$share_range[i]), silent = TRUE)
 
   if(class(fit) == "sdmTMB") {
+      # create output directory if it doesn't exist
+      if (!dir.exists("diagnostics")) {
+        dir.create("diagnostics")
+      }
+      # Check write access
+      file.access("diagnostics", mode = 2)
+
       san <- sanity(fit, silent=TRUE)
       saveRDS(san, file=paste0("diagnostics/sanity_",
                                config_data$index[i], ".rds"))
@@ -193,7 +200,15 @@ process_species <- function(i) {
       indices$index_id <- config_data$index[i]
       indices$common_name <- sub$common_name[1]
 
+      # append date as attribute
       attr(indices, "date") <- Sys.Date()
+
+      # create output directory if it doesn't exist
+      if (!dir.exists("output")) {
+        dir.create("output")
+      }
+      # Check write access
+      file.access("output", mode = 2)
 
       saveRDS(indices,
               paste0("output/",
