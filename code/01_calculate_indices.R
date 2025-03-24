@@ -86,11 +86,11 @@ config_data$batch <- rep(1:num_batches, length.out = nrow(config_data))
 # Filter out only focal batch
 config_data <- dplyr::filter(config_data, batch == current_batch)
 
-library(future)
-library(future.apply)
+#library(future)
+#library(future.apply)
 
 # Plan for parallelization (adjust number of workers as needed)
-plan(multisession, workers = parallel::detectCores() - 1)
+#plan(multisession, workers = parallel::detectCores() - 1)
 
 #for (i in 1:nrow(config_data)) {
 process_species <- function(i) {
@@ -203,4 +203,8 @@ process_species <- function(i) {
 }
 
 # Apply process_species in parallel
-future_lapply(1:nrow(config_data), process_species)
+#future_lapply(1:nrow(config_data), process_species)
+
+for(i in 1:nrow(config_data)) {
+  process_species(i)
+}
