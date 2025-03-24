@@ -37,4 +37,5 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add output/  # add the output directory explicitly
+          git add diagnostics/  # add the diagnostics directory explicitly
           git diff-index --quiet HEAD || (git commit -m '[bot] update files' --allow-empty && git push -f)
