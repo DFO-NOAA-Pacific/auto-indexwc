@@ -3,7 +3,7 @@ on:
     - cron: '0 0 2 1,4,7,10 *' # Scheduled runs
   push:
     paths:
-      - 'code/01_calculate_indices.R'
+      - 'code/01_calculate_indices.R' # source
 
 name: R-run-models1
 

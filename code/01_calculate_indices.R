@@ -4,6 +4,8 @@ library(dplyr)
 library(sdmTMB)
 library(stringr)
 library(dbplyr)
+library(future)
+library(future.apply)
 
 num_batches <- 8
 # Read the batch number passed from GitHub Action
@@ -86,13 +88,9 @@ config_data$batch <- rep(1:num_batches, length.out = nrow(config_data))
 # Filter out only focal batch
 config_data <- dplyr::filter(config_data, batch == current_batch)
 
-#library(future)
-#library(future.apply)
-
 # Plan for parallelization (adjust number of workers as needed)
-#plan(multisession, workers = parallel::detectCores() - 1)
+plan(multisession, workers = parallel::detectCores() - 1)
 
-#for (i in 1:nrow(config_data)) {
 process_species <- function(i) {
   sub <- dplyr::filter(dat, common_name == unique(tolower(config_data$species[i])))
   sub <- dplyr::mutate(sub, zday = (yday - mean(sub$yday)) / sd(sub$yday))
@@ -218,7 +216,7 @@ process_species <- function(i) {
 }
 
 # Apply process_species in parallel
-#future_lapply(1:nrow(config_data), process_species)
-for(i in 1:nrow(config_data)) {
-  process_species(i)
-}
+future_lapply(1:nrow(config_data), process_species)
+# for(i in 1:nrow(config_data)) {
+#   process_species(i)
+# }
