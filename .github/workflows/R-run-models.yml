@@ -26,7 +26,7 @@ jobs:
 
       - name: Install surveyjoin
         run: |
-          Rscript -e "remotes::install_github('DFO-NOAA-Pacific/surveyjoin', ref='gh-actions')"
+          Rscript -e "remotes::install_github('DFO-NOAA-Pacific/surveyjoin')"
 
       - name: Run SDMs with sdmTMB for Batch ${{ matrix.batch }}
         run: |
