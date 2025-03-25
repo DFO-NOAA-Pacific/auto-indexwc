@@ -216,7 +216,7 @@ process_species <- function(i) {
 }
 
 # Apply process_species in parallel
-future_lapply(1:nrow(config_data), process_species)
-# for(i in 1:nrow(config_data)) {
+future_lapply(1:nrow(config_data), process_species, future.seed = TRUE)
+#for(i in 1:nrow(config_data)) {
 #   process_species(i)
-# }
+#}
