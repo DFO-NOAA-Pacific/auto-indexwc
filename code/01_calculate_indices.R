@@ -131,7 +131,7 @@ process_species <- function(i) {
       # Make coastwide index
       pred_all <- predict(fit, wcgbts_grid, return_tmb_object = TRUE)
       index_all <- get_index(pred_all,
-                             area = wcgbts_grid$area,
+                             area = wcgbts_grid$area_km2_WCGBTS,
                              bias_correct = TRUE)
       index_all$index <- "Coastwide"
 
@@ -163,7 +163,7 @@ process_species <- function(i) {
 
         if (nrow(sub_grid) > 0) {
           pred <- predict(fit, sub_grid, return_tmb_object = TRUE)
-          index <- get_index(pred, area = sub_grid$area, bias_correct = TRUE)
+          index <- get_index(pred, area = sub_grid$area_km2_WCGBTS, bias_correct = TRUE)
           index$index <- region_name
         } else {
           index <- data.frame(
