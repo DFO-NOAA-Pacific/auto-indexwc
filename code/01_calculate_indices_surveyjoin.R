@@ -1,10 +1,9 @@
-library(nwfscSurvey)
-library(indexwc)
+library(surveyjoin)
 library(lubridate)
 library(dplyr)
 library(sdmTMB)
 library(stringr)
-
+library(dbplyr)
 # library(future)
 # library(future.apply)
 
@@ -31,24 +30,58 @@ config_data$formula <- str_replace(config_data$formula,
 config_data$family <- str_replace(config_data$family, "sdmTMB::", "")
 config_data$family <- str_replace(config_data$family, "\\(\\)", "")
 
-# Use nwfscSurvey to get the data
-haul <- nwfscSurvey::pull_haul(survey = "NWFSC.Combo")
-dat <- nwfscSurvey::pull_catch(survey = "NWFSC.Combo",
-                               common_name = config_data$species)
-names(dat) <- tolower(names(dat))
-dat <- dplyr::left_join(dat, haul[,c("trawl_id","area_swept_ha_der")])
-# convert date string to doy
-dat$yday <- lubridate::yday(dat$date)
+# handful of rockfishes aren't in surveyjoin:
+#[1] "aurora rockfish"       "blackgill rockfish"    "chilipepper"
+#[4] "greenspotted rockfish" "longspine thornyhead"  "rougheye rockfish"
+#[7] "stripetail rockfish"   "yelloweye rockfish"    "yellowtail rockfish"
 
-dat <- dplyr::filter(dat, !is.na(longitude_dd),
+# Use the surveyjoin data
+surveyjoin::cache_data()
+surveyjoin::load_sql_data()
+dat <- surveyjoin::get_data()
+
+# cut down data for only species in the config file
+dat <- dplyr::filter(dat,
+                     common_name %in% tolower(config_data$species))
+
+# for illustrative purposes, focus initially on WCGBTS
+dat <- dplyr::filter(dat, survey_name == "NWFSC.Combo")
+
+# convert date string to doy
+dat$yday <- lubridate::yday(lubridate::ymd(dat$date))
+
+dat <- dplyr::rename(dat, latitude_dd = lat_start,
+                     longitude_dd = lon_start) |>
+  dplyr::filter(!is.na(longitude_dd),
                 !is.na(latitude_dd))
+
+# filter fields for smaller file size
+dat <- dplyr::select(dat,
+                     #event_id,
+                     common_name,
+                     year,
+                     yday,
+                     depth_m,
+                     effort,
+                     catch_weight,
+                     scientific_name,
+                     longitude_dd,
+                     latitude_dd
+)
 
 crs_out <- 32610
 
+# Load data
+#dat <- readRDS("data/wcgbts.rds")
 # add X, Y
 dat <- sdmTMB::add_utm_columns(dat,
                                ll_names = c("longitude_dd","latitude_dd"),
                                utm_crs = crs_out)
+
+# Filter config data down based on available species
+spp <- unique(dat$common_name)
+spp <- spp[which(spp%in%config_data$species)]
+config_data <- dplyr::filter(config_data, tolower(species) %in% spp)
 
 # Assign batch numbers in a round-robin fashion
 config_data$batch <- rep(1:num_batches, length.out = nrow(config_data))
@@ -61,7 +94,6 @@ config_data <- dplyr::filter(config_data, batch == current_batch)
 process_species <- function(i) {
   sub <- dplyr::filter(dat, common_name == unique(tolower(config_data$species[i])))
   sub <- dplyr::mutate(sub, zday = (yday - mean(sub$yday)) / sd(sub$yday))
-  sub$pass_scaled <- sub$pass - mean(range(sub$pass)) # -0.5, 0.5
   # apply the year, latitude, and depth filters if used
   sub <- dplyr::filter(sub,
                        latitude_dd >= config_data$min_latitude[i],
@@ -69,22 +101,20 @@ process_species <- function(i) {
                        year >= config_data$min_year[i],
                        year <= config_data$max_year[i],
                        depth_m >= config_data$min_depth[i],
-                       depth_m <= config_data$max_depth[i]) |>
-    dplyr::rename(catch_weight = total_catch_wt_kg)
+                       depth_m <= config_data$max_depth[i])
 
   # make a mesh based on settings in config
   mesh <- sdmTMB::make_mesh(sub, xy_cols = c("X","Y"),
                             n_knots = config_data$knots[i])
   sub$fyear <- as.factor(sub$year) # year as factor
 
-  sub$area_km2 <- sub$area_swept_ha_der * 0.01 # convert to km2
   # fit the model using arguments in configuration file
   # initialize to NULL and wrap in try() to avoid
   # 'system is computationally singular' errors
   fit <- NULL
   fit <- try(sdmTMB(formula = as.formula(config_data$formula[i]),
                 time = "year",
-                offset = log(sub$area_km2),
+                offset = log(sub$effort),
                 mesh = mesh,
                 data = sub,
                 spatial="on",
@@ -107,20 +137,19 @@ process_species <- function(i) {
                                config_data$index[i], ".rds"))
 
       # make predictions
-      wcgbts_grid <- indexwc::california_current_grid
+      wcgbts_grid <- surveyjoin::nwfsc_grid
       # first filter the grid like with the data
       wcgbts_grid <- dplyr::filter(wcgbts_grid,
-                                   latitude >= config_data$min_latitude[i],
-                                   latitude < config_data$max_latitude[i],
-                                   depth >= config_data$min_depth[i],
-                                   depth < config_data$max_depth[i],
-                                   area_km2_WCGBTS > 0)
+                                   lat >= config_data$min_latitude[i],
+                                   lat < config_data$max_latitude[i],
+                                   depth_m >= config_data$min_depth[i],
+                                   depth_m < config_data$max_depth[i],
+                                   area > 0)
       # Add calendar date -- predicting to jul 1
       wcgbts_grid$zday <- (182 - mean(sub$yday)) / sd(sub$yday)
-      wcgbts_grid$pass_scaled <- 0
       # add X-Y
       wcgbts_grid <- sdmTMB::add_utm_columns(wcgbts_grid,
-                                             ll_names = c("longitude","latitude"),
+                                             ll_names = c("lon","lat"),
                                              utm_crs = crs_out)
 
       # replicate grid
@@ -134,29 +163,6 @@ process_species <- function(i) {
                              area = wcgbts_grid$area,
                              bias_correct = TRUE)
       index_all$index <- "Coastwide"
-
-      # bootstrapping function for biomass wrighted depth
-      bootstrap_year_sample <- function(df, n_boot = 200) {
-        df$biomass <- plogis(df$est1) * exp(df$est2)
-        means <- 0
-        for(i in 1:n_boot) {
-          sampled <- df[sample(1:nrow(df), size = nrow(df), replace = TRUE, prob = df$biomass), ]
-          means[i] <- sum(sampled$depth * sampled$biomass) / sum(sampled$biomass)
-        }
-
-        tibble(
-          year = unique(df$year),
-          mean_depth = mean(means),
-          ci_lower = quantile(means, 0.025),
-          ci_upper = quantile(means, 0.975)
-        )
-      }
-      # calculate biomass weighted depth
-      mean_depth <- pred_all$data |>
-        group_by(year) |>
-        group_split() |>
-        lapply(bootstrap_year_sample) |>
-        bind_rows()
 
       process_region <- function(region_code, region_name) {
         sub_grid <- dplyr::filter(as.data.frame(wcgbts_grid), split_state == region_code)
@@ -204,10 +210,6 @@ process_species <- function(i) {
 
       saveRDS(indices,
               paste0("output/",
-                     sub$common_name[1],"_",
-                     config_data$index_id[i],".rds"))
-      saveRDS(mean_depth,
-              paste0("output/biomass_weighted_depth_",
                      sub$common_name[1],"_",
                      config_data$index_id[i],".rds"))
   }

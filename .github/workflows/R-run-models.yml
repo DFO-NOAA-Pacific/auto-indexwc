@@ -22,11 +22,15 @@ jobs:
 
       - name: Install packages
         run: |
-          Rscript -e "install.packages(c('remotes', 'dplyr', 'dbplyr', 'future', 'future.apply', 'sdmTMB', 'stringr', 'lubridate'))"
+          Rscript -e "install.packages(c('remotes', 'dplyr', 'future', 'future.apply', 'sdmTMB', 'stringr', 'lubridate'))"
 
-      - name: Install surveyjoin
+      - name: Install indexwc
         run: |
-          Rscript -e "remotes::install_github('DFO-NOAA-Pacific/surveyjoin')"
+          Rscript -e "remotes::install_github('pfmc-assessments/indexwc')"
+
+      - name: Install nwfscSurvey
+        run: |
+          Rscript -e "remotes::install_github('pfmc-assessments/nwfscSurvey')"
 
       - name: Run SDMs with sdmTMB for Batch ${{ matrix.batch }}
         run: |
