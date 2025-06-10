@@ -24,9 +24,9 @@ config_data$index_id <- seq_len(nrow(config_data))
 config_data$max_depth <- -config_data$max_depth
 config_data$min_depth <- -config_data$min_depth
 # drop out pass_scaled and put in yday instead
-config_data$formula <- str_replace(config_data$formula,
-                                   "pass_scaled",
-                                   "zday + I(zday^2)")
+# config_data$formula <- str_replace(config_data$formula,
+#                                    "pass_scaled",
+#                                    "zday + I(zday^2)")
 # replace longnames in family
 config_data$family <- str_replace(config_data$family, "sdmTMB::", "")
 config_data$family <- str_replace(config_data$family, "\\(\\)", "")
