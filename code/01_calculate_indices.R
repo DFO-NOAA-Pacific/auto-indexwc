@@ -59,7 +59,7 @@ config_data <- dplyr::filter(config_data, batch == current_batch)
 #plan(multisession, workers = parallel::detectCores() - 1)
 
 process_species <- function(i) {
-  sub <- dplyr::filter(dat, common_name == unique(tolower(config_data$species[i])))
+  sub <- dplyr::filter(dat, common_name == config_data$species[i])
   sub <- dplyr::mutate(sub, zday = (yday - mean(sub$yday)) / sd(sub$yday))
   sub$pass_scaled <- sub$pass - mean(range(sub$pass)) # -0.5, 0.5
   # apply the year, latitude, and depth filters if used
