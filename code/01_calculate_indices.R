@@ -39,10 +39,11 @@ names(dat) <- tolower(names(dat))
 dat <- dplyr::left_join(dat, haul[,c("trawl_id","area_swept_ha_der")])
 # convert date string to doy
 dat$yday <- lubridate::yday(dat$date)
-
+# filter out a few bad locations
 dat <- dplyr::filter(dat, !is.na(longitude_dd),
                 !is.na(latitude_dd))
 
+# Set default CRS for estimation / prediction
 crs_out <- 32610
 
 # add X, Y
@@ -78,9 +79,18 @@ process_species <- function(i) {
   sub$fyear <- as.factor(sub$year) # year as factor
 
   sub$area_km2 <- sub$area_swept_ha_der * 0.01 # convert to km2
+
+  # this is to help with printing, if done below
+  st <- if(config_data$family[i] == "tweedie") {
+    config_data$spatiotemporal1[i]
+  } else {
+    list(config_data$spatiotemporal1[i],
+         config_data$spatiotemporal2[i])
+  }
+
   # fit the model using arguments in configuration file
   # initialize to NULL and wrap in try() to avoid
-  # 'system is computationally singular' errors
+  # 'system is computationally singular' error
   fit <- NULL
   fit <- try(sdmTMB(formula = as.formula(config_data$formula[i]),
                 time = "year",
@@ -88,8 +98,7 @@ process_species <- function(i) {
                 mesh = mesh,
                 data = sub,
                 spatial="on",
-                spatiotemporal=list(config_data$spatiotemporal1[i],
-                                    config_data$spatiotemporal2[i]),
+                spatiotemporal=st,
                 anisotropy = config_data$anisotropy[i],
                 family = get(config_data$family[i])(),
                 share_range = config_data$share_range[i]), silent = TRUE)
@@ -137,11 +146,15 @@ process_species <- function(i) {
 
       # bootstrapping function for biomass wrighted depth
       bootstrap_year_sample <- function(df, n_boot = 200) {
-        df$biomass <- plogis(df$est1) * exp(df$est2)
+        if(config_data$family[i] == "tweedie") {
+          df$biomass <- exp(df$est)
+        } else {
+          df$biomass <- plogis(df$est1) * exp(df$est2)
+        }
         means <- 0
-        for(i in 1:n_boot) {
+        for(ii in 1:n_boot) {
           sampled <- df[sample(1:nrow(df), size = nrow(df), replace = TRUE, prob = df$biomass), ]
-          means[i] <- sum(sampled$depth * sampled$biomass) / sum(sampled$biomass)
+          means[ii] <- sum(sampled$depth * sampled$biomass) / sum(sampled$biomass)
         }
 
         tibble(
@@ -215,6 +228,6 @@ process_species <- function(i) {
 
 # Apply process_species in parallel
 #future_lapply(1:nrow(config_data), process_species, future.seed = TRUE)
-for(i in 1:nrow(config_data)) {
-   process_species(i)
+for(spp in 1:nrow(config_data)) {
+   process_species(spp)
 }
