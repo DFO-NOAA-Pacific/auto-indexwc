@@ -1,79 +1,28 @@
-name: R-run-models1
-
-on:
-  schedule:
-    - cron: '0 0 2 1,4,7,10 *'
-  push:
-    paths:
-      - 'code/01_calculate_indices.R'
-
-jobs:
-  run-models:
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        batch: [1, 2, 3, 4, 5, 6, 7, 8]
-    env:
-      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
-      R_KEEP_PKG_SOURCE: yes
-    steps:
-      - uses: actions/checkout@v4
-      - uses: r-lib/actions/setup-r@v2
-
-      - name: Install packages
-        run: Rscript -e "install.packages(c('remotes', 'dplyr', 'future', 'future.apply', 'sdmTMB', 'stringr', 'lubridate'))"
-
-      - name: Install indexwc
-        run: Rscript -e "remotes::install_github('pfmc-assessments/indexwc')"
-
-      - name: Install nwfscSurvey
-        run: Rscript -e "remotes::install_github('pfmc-assessments/nwfscSurvey')"
-
-      - name: Run SDMs with sdmTMB for Batch ${{ matrix.batch }}
-        run: Rscript code/01_calculate_indices.R ${{ matrix.batch }}
-
-      - name: Upload results for Batch ${{ matrix.batch }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: batch-${{ matrix.batch }}
-          path: |
-            output/
-            diagnostics/
-
-  commit-results:
+commit-results:
     runs-on: macos-latest
     needs: run-models
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed to create and switch branches
 
       - name: Download all batch outputs
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts
 
-      - name: Move results into repo
+      - name: Create clean branch with only results
         run: |
+          git checkout --orphan autogen-results
+          git rm -rf . || true  # remove everything from the index
           mkdir -p output diagnostics
           find artifacts -type f -name '*.rds' -exec cp {} output/ \;
           find artifacts -type f -name '*.png' -exec cp {} diagnostics/ \;
-
-      - name: Commit results (skip if workflow changed)
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-
           git add output/ diagnostics/
+          git commit -m "[bot] update results for all batches"
 
-          # Skip commit and push if a workflow file is staged
-          if git diff --cached --name-only | grep '^.github/' > /dev/null; then
-            echo "Skipping commit and push due to workflow file change"
-            exit 0
-          fi
-
-          if git diff-index --quiet HEAD; then
-            echo "No changes to commit"
-            exit 0
-          fi
-
-          git commit -m '[bot] update files'
-          git push
+      - name: Push to autogen-results branch
+        env:
+          PAT_PUSH: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git push -f https://x-access-token:${PAT_PUSH}@github.com/${{ github.repository }}.git autogen-results
