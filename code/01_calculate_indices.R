@@ -133,8 +133,8 @@ process_species <- function(i) {
       file.access("diagnostics", mode = 2)
 
       san <- sanity(fit, silent=TRUE)
-      saveRDS(san, file=paste0("diagnostics/sanity_",
-                               config_data$index[i], ".rds"))
+      write.csv(san, file=paste0("diagnostics/sanity_",
+                               config_data$index[i], ".csv"), row.names=FALSE)
 
       # make predictions
       wcgbts_grid <- indexwc::california_current_grid
@@ -236,14 +236,14 @@ process_species <- function(i) {
       # Check write access
       file.access("output", mode = 2)
 
-      saveRDS(indices,
+      write.csv(indices,
               paste0("output/",
                      sub$common_name[1],"_",
-                     config_data$index_id[i],".rds"))
-      saveRDS(mean_depth,
+                     config_data$index_id[i],".csv"), row.names=FALSE)
+      write.csv(mean_depth,
               paste0("output/biomass_weighted_depth_",
                      sub$common_name[1],"_",
-                     config_data$index_id[i],".rds"))
+                     config_data$index_id[i],".csv"), row.names=FALSE)
   }
 }
 
