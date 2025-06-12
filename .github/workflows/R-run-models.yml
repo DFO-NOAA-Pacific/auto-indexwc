@@ -61,5 +61,8 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add output/ diagnostics/
+          git add output/ diagnostics/  # Only stage output and diagnostics
+          # Confirm nothing else (like .github/workflows/) is accidentally staged
+          git status
+          git diff --cached --name-only | grep '^.github/' && echo "Skipping commit due to workflow file change" && exit 0
           git diff-index --quiet HEAD || (git commit -m '[bot] update files' && git push)
