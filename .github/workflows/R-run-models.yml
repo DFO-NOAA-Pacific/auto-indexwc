@@ -59,7 +59,7 @@ jobs:
           git rm -rf . || true  # clear working tree
           
           mkdir -p output diagnostics
-          find artifacts -type f -name '*.rds' -exec cp {} output/ \;
+          find artifacts -type f -name '*.csv' -exec cp {} output/ \;
           find artifacts -type f -name '*.png' -exec cp {} diagnostics/ \;
 
           git add output/ diagnostics/
