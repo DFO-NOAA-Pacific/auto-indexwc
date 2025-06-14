@@ -9,7 +9,7 @@ library(stringr)
 # library(future)
 # library(future.apply)
 
-num_batches <- 8
+num_batches <- 12
 # Read the batch number passed from GitHub Action
 args <- commandArgs(trailingOnly = TRUE)
 current_batch <- as.numeric(args[1]) # This gets the batch number

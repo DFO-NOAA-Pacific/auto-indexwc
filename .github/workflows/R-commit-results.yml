@@ -1,0 +1,48 @@
+name: Commit results
+
+on:
+  schedule:
+    - cron: '0 0 3 1,4,7,10 *'  # midnight UTC on the 3rd 
+
+jobs:
+  commit-results:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # required for branch creation
+
+      - name: Download all batch outputs
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Merge outputs and push to autogen-results branch
+        run: |
+          git checkout --orphan autogen-results
+          git rm -rf . || true  # clear everything
+
+          mkdir -p output diagnostics
+          for batch_dir in artifacts/batch-*; do
+            echo "Processing $batch_dir"
+            if [ -d "$batch_dir/output" ]; then
+              cp -v "$batch_dir/output"/*.csv output/ 2>/dev/null || echo "No CSVs in $batch_dir/output"
+            fi
+            if [ -d "$batch_dir/diagnostics" ]; then
+              cp -v "$batch_dir/diagnostics"/*.png diagnostics/ 2>/dev/null || echo "No PNGs in $batch_dir/diagnostics"
+            fi
+          done
+
+          echo "Final file counts:"
+          ls output/ | wc -l
+          ls diagnostics/ | wc -l
+
+          git add output/ diagnostics/
+          git commit -m "[bot] update results from artifacts"
+      
+      - name: Push to autogen-results branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git push -f https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git autogen-results

@@ -2,7 +2,7 @@ name: R-run-models1
 
 on:
   schedule:
-    - cron: '0 0 2 1,4,7,10 *'
+    - cron: '0 0 2 1,4,7,10 *' # midnight UTC on the 2nd
   push:
     paths:
       - 'code/01_calculate_indices.R'
@@ -12,7 +12,7 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        batch: [1, 2, 3, 4, 5, 6, 7, 8]
+        batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
@@ -39,34 +39,3 @@ jobs:
           path: |
             output/
             diagnostics/
-
-  commit-results:
-    runs-on: macos-latest
-    needs: run-models
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # required to create or switch branches
-
-      - name: Download all batch outputs
-        uses: actions/download-artifact@v4
-        with:
-          path: ./artifacts
-
-      - name: Create autogen-results branch and copy results
-        run: |
-          git checkout --orphan autogen-results
-          git rm -rf . || true  # clear working tree
-          
-          mkdir -p output diagnostics
-          find artifacts -type f -name '*.csv' -exec cp {} output/ \;
-          find artifacts -type f -name '*.png' -exec cp {} diagnostics/ \;
-
-          git add output/ diagnostics/
-          git commit -m "[bot] update results for all batches"
-
-      - name: Push to autogen-results branch
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git push -f https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git autogen-results
