@@ -9,7 +9,7 @@ library(stringr)
 # library(future)
 # library(future.apply)
 
-num_batches <- 12
+num_batches <- 24
 # Read the batch number passed from GitHub Action
 args <- commandArgs(trailingOnly = TRUE)
 current_batch <- as.numeric(args[1]) # This gets the batch number
@@ -61,25 +61,6 @@ config_data <- dplyr::filter(config_data, batch == current_batch)
 
 # Plan for parallelization (adjust number of workers as needed)
 #plan(multisession, workers = parallel::detectCores() - 1)
-process_species <- function(i) {
-  sub <- dplyr::filter(dat, common_name == config_data$species[i])
-  sub <- dplyr::mutate(sub, zday = (yday - mean(sub$yday)) / sd(sub$yday))
-  sub$pass_scaled <- sub$pass - mean(range(sub$pass)) # -0.5, 0.5
-  # apply the year, latitude, and depth filters if used
-  sub <- dplyr::filter(sub,
-                       latitude_dd >= config_data$min_latitude[i],
-                       latitude_dd < config_data$max_latitude[i],
-                       year >= config_data$min_year[i],
-                       year <= config_data$max_year[i],
-                       depth_m >= config_data$min_depth[i],
-                       depth_m <= config_data$max_depth[i]) |>
-    dplyr::rename(catch_weight = total_catch_wt_kg)
-
-  # make a mesh based on settings in config
-  mesh <- sdmTMB::make_mesh(sub, xy_cols = c("X","Y"),
-                            n_knots = config_data$knots[i])
-}
-
 
 process_species <- function(i) {
   sub <- dplyr::filter(dat, common_name == config_data$species[i])
@@ -251,6 +232,5 @@ process_species <- function(i) {
 # Apply process_species in parallel
 #future_lapply(1:nrow(config_data), process_species, future.seed = TRUE)
 for(spp in 1:nrow(config_data)) {
-  print(spp)
-   process_species(spp)
+  process_species(spp)
 }
