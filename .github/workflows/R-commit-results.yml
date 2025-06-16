@@ -100,7 +100,7 @@ jobs:
             fi
 
             if [ -d "$batch_dir/diagnostics" ]; then
-              cp -v "$batch_dir/diagnostics"/*.png diagnostics/ 2>/dev/null || echo "No PNGs found in $batch_dir/diagnostics"
+              cp -v "$batch_dir/diagnostics"/*.csv diagnostics/ 2>/dev/null || echo "No CSVs found in $batch_dir/diagnostics"
             else
               echo "No diagnostics directory in $batch_dir"
             fi
