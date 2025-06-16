@@ -2,10 +2,11 @@ name: Commit results
 
 on:
   schedule:
-    - cron: '0 0 3 1,4,7,10 *'  # midnight UTC on the 3rd
+    - cron: '0 0 3 1,4,7,10 *'  # Runs at midnight UTC on the 3rd of Jan, Apr, Jul, Oct
   push:
     paths:
       - .github/workflows/R-commit-results.yml
+
 jobs:
   commit-results:
     runs-on: macos-latest
@@ -13,38 +14,74 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # required for branch creation
+          fetch-depth: 0  # Required for branch creation
 
-      - name: Download all batch outputs
-        uses: actions/download-artifact@v4
+      # Download and extract artifacts into separate folders
+      - name: Download and extract artifacts
+        uses: actions/github-script@v7
         with:
-          path: ./artifacts
+          script: |
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+            });
 
-      - name: Merge outputs and push to autogen-results branch
+            const fs = require('fs');
+            const path = require('path');
+            const { execSync } = require('child_process');
+
+            if (!fs.existsSync('./artifacts')) fs.mkdirSync('./artifacts');
+
+            for (const artifact of artifacts.data.artifacts) {
+              const dest = `./artifacts/${artifact.name}.zip`;
+              const extractDir = `./artifacts/${artifact.name}`;
+
+              console.log(`Downloading ${artifact.name}`);
+              const download = await github.rest.actions.downloadArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: artifact.id,
+                archive_format: 'zip',
+              });
+
+              fs.writeFileSync(dest, Buffer.from(download.data));
+              fs.mkdirSync(extractDir);
+              execSync(`unzip -q ${dest} -d ${extractDir}`);
+              console.log(`Extracted to ${extractDir}`);
+            }
+
+      - name: Show extracted artifact contents
+        run: |
+          echo "Artifacts directory structure:"
+          find artifacts
+
+      - name: Merge outputs and prepare results
         run: |
           git checkout --orphan autogen-results
-          git rm -rf . || true  # clear everything
+          git rm -rf . || true  # Remove tracked files (if any)
 
           mkdir -p output diagnostics
+
           for batch_dir in artifacts/batch-*; do
             echo "Processing $batch_dir"
             if [ -d "$batch_dir/output" ]; then
-              cp -v "$batch_dir/output"/*.csv output/ 2>/dev/null || echo "No CSVs in $batch_dir/output"
+              cp -v "$batch_dir/output"/*.csv output/ 2>/dev/null || echo "No CSVs found"
             fi
             if [ -d "$batch_dir/diagnostics" ]; then
-              cp -v "$batch_dir/diagnostics"/*.png diagnostics/ 2>/dev/null || echo "No PNGs in $batch_dir/diagnostics"
+              cp -v "$batch_dir/diagnostics"/*.png diagnostics/ 2>/dev/null || echo "No PNGs found"
             fi
           done
 
-          echo "Final file counts:"
-          ls output/ | wc -l
-          ls diagnostics/ | wc -l
+          echo "Final output file count:"
+          ls output | wc -l || true
+          echo "Final diagnostics file count:"
+          ls diagnostics | wc -l || true
 
           git add output/ diagnostics/
-          git commit -m "[bot] update results from artifacts"
-
-      - name: Push to autogen-results branch
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git push -f https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git autogen-results
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "[bot] update results from artifacts"
+            git push -f https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git autogen-results
+          fi
