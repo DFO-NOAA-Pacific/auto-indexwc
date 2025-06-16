@@ -1,4 +1,4 @@
-# autogen-indices
+# autogen-wc-indices
 Lightweight demo of using sdmTMB to automate index standardization with Github actions. As a case study, we use data from the West Coast of the U.S.
 
 Model fitting: [![R-run-models1](https://github.com/DFO-NOAA-Pacific/autogen-indices/actions/workflows/R-run-models.yml/badge.svg)](https://github.com/DFO-NOAA-Pacific/autogen-indices/actions/workflows/R-run-models.yml)
