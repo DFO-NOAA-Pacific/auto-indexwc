@@ -16,11 +16,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download and extract artifacts from last successful R-run-models1 run
+      - name: Download and extract artifacts from last successful R-run-models run
         uses: actions/github-script@v7
         with:
           script: |
-            const workflowFileName = "R-run-models1.yml";
+            const workflowFileName = "R-run-models.yml";
             const fs = require('fs');
             const { execSync } = require('child_process');
 
