@@ -2,7 +2,7 @@ name: Commit results
 
 on:
   schedule:
-    - cron: '0 0 3 1,4,7,10 *'  # Runs at midnight UTC on the 3rd of Jan, Apr, Jul, Oct
+    - cron: '0 0 3 1,4,7,10 *'  # Runs midnight UTC on the 3rd of Jan, Apr, Jul, Oct
   push:
     paths:
       - .github/workflows/R-commit-results.yml
@@ -14,30 +14,58 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Required for branch creation
+          fetch-depth: 0
 
-      # Download and extract artifacts into separate folders
-      - name: Download and extract artifacts
+      - name: Download and extract artifacts from last successful R-run-models1 run
         uses: actions/github-script@v7
         with:
           script: |
+            const workflowFileName = "R-run-models1.yml";
+            const fs = require('fs');
+            const { execSync } = require('child_process');
+
+            // 1. Get workflow ID
+            const workflows = await github.rest.actions.listRepoWorkflows({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const workflow = workflows.data.workflows.find(wf => wf.path.endsWith(workflowFileName));
+            if (!workflow) {
+              throw new Error(`Workflow ${workflowFileName} not found.`);
+            }
+
+            // 2. Get latest successful run
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: workflow.id,
+              status: "success",
+              per_page: 1,
+            });
+
+            const latestRun = runs.data.workflow_runs[0];
+            if (!latestRun) {
+              throw new Error(`No successful runs found for ${workflowFileName}`);
+            }
+
+            console.log(`Fetching artifacts from run ID ${latestRun.id} of workflow ${workflowFileName}`);
+
+            // 3. Download artifacts
             const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              run_id: context.runId,
+              run_id: latestRun.id,
             });
-
-            const fs = require('fs');
-            const path = require('path');
-            const { execSync } = require('child_process');
 
             if (!fs.existsSync('./artifacts')) fs.mkdirSync('./artifacts');
 
             for (const artifact of artifacts.data.artifacts) {
-              const dest = `./artifacts/${artifact.name}.zip`;
-              const extractDir = `./artifacts/${artifact.name}`;
+              const name = artifact.name;
+              const destZip = `./artifacts/${name}.zip`;
+              const extractDir = `./artifacts/${name}`;
 
-              console.log(`Downloading ${artifact.name}`);
+              console.log(`Downloading ${name}`);
               const download = await github.rest.actions.downloadArtifact({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -45,40 +73,45 @@ jobs:
                 archive_format: 'zip',
               });
 
-              fs.writeFileSync(dest, Buffer.from(download.data));
+              fs.writeFileSync(destZip, Buffer.from(download.data));
               fs.mkdirSync(extractDir);
-              execSync(`unzip -q ${dest} -d ${extractDir}`);
-              console.log(`Extracted to ${extractDir}`);
+              execSync(`unzip -q ${destZip} -d ${extractDir}`);
+              console.log(`Extracted ${name} to ${extractDir}`);
             }
 
       - name: Show extracted artifact contents
         run: |
-          echo "Artifacts directory structure:"
+          echo "Extracted artifact directory structure:"
           find artifacts
 
-      - name: Merge outputs and prepare results
+      - name: Merge outputs and prepare autogen-results branch
         run: |
           git checkout --orphan autogen-results
-          git rm -rf . || true  # Remove tracked files (if any)
+          git rm -rf . || true
 
           mkdir -p output diagnostics
 
-          for batch_dir in artifacts/batch-*; do
+          for batch_dir in artifacts/*; do
             echo "Processing $batch_dir"
             if [ -d "$batch_dir/output" ]; then
-              cp -v "$batch_dir/output"/*.csv output/ 2>/dev/null || echo "No CSVs found"
+              cp -v "$batch_dir/output"/*.csv output/ 2>/dev/null || echo "No CSVs found in $batch_dir/output"
+            else
+              echo "No output directory in $batch_dir"
             fi
+
             if [ -d "$batch_dir/diagnostics" ]; then
-              cp -v "$batch_dir/diagnostics"/*.png diagnostics/ 2>/dev/null || echo "No PNGs found"
+              cp -v "$batch_dir/diagnostics"/*.png diagnostics/ 2>/dev/null || echo "No PNGs found in $batch_dir/diagnostics"
+            else
+              echo "No diagnostics directory in $batch_dir"
             fi
           done
 
           echo "Final output file count:"
-          ls output | wc -l || true
+          find output -type f | wc -l
           echo "Final diagnostics file count:"
-          ls diagnostics | wc -l || true
+          find diagnostics -type f | wc -l
 
-          git add output/ diagnostics/
+          git add output diagnostics
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
