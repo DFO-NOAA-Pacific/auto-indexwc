@@ -23,6 +23,7 @@ config_data$min_latitude <- as.numeric(config_data$min_latitude)
 config_data$min_year[which(config_data$min_year=="#NAME?")] = NA
 config_data$min_year <- as.numeric(config_data$min_year)
 
+config_data <- dplyr::filter(config_data, source == "NWFSC.Combo")
 # add model index
 config_data$index_id <- seq_len(nrow(config_data))
 
