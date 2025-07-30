@@ -16,8 +16,13 @@ current_batch <- as.numeric(args[1]) # This gets the batch number
 
 url <- "https://raw.githubusercontent.com/pfmc-assessments/indexwc/main/data-raw/configuration.csv"
 config_data <- read.csv(url, stringsAsFactors = FALSE)
-config_data <- dplyr::filter(config_data,
-                             source == "NWFSC.Combo")
+config_data$max_depth[which(config_data$max_depth=="#NAME?")] = NA
+config_data$max_depth <- as.numeric(config_data$max_depth)
+config_data$min_latitude[which(config_data$min_latitude=="#NAME?")] = NA
+config_data$min_latitude <- as.numeric(config_data$min_latitude)
+config_data$min_year[which(config_data$min_year=="#NAME?")] = NA
+config_data$min_year <- as.numeric(config_data$min_year)
+
 # add model index
 config_data$index_id <- seq_len(nrow(config_data))
 
