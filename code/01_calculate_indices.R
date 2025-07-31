@@ -114,18 +114,17 @@ process_species <- function(i) {
                 family = get(config_data$family[i])(),
                 share_range = config_data$share_range[i]), silent = TRUE)
 
-  if(class(fit) == "sdmTMB") {
-      # create output directory if it doesn't exist
-      if (!dir.exists("diagnostics")) {
-        dir.create("diagnostics")
-      }
-      # Check write access
-      file.access("diagnostics", mode = 2)
-
-      san <- sanity(fit, silent=TRUE)
-      write.csv(san, file=paste0("diagnostics/sanity_",
-                               config_data$index[i], ".csv"), row.names=FALSE)
-
+  # create output directory if it doesn't exist
+  if (!dir.exists("diagnostics")) {
+    dir.create("diagnostics")
+  }
+  # Check write access
+  file.access("diagnostics", mode = 2)
+  san <- sanity(fit, silent=TRUE)
+  write.csv(san, file=paste0("diagnostics/sanity_",
+                             config_data$index[i], ".csv"), row.names=FALSE)
+  
+  if(class(fit) == "sdmTMB" & sum(unlist(san[1:7])) == 7) {
       # make predictions
       wcgbts_grid <- indexwc::california_current_grid
       # first filter the grid like with the data
