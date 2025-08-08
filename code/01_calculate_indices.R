@@ -14,28 +14,16 @@ num_batches <- 24
 args <- commandArgs(trailingOnly = TRUE)
 current_batch <- as.numeric(args[1]) # This gets the batch number
 
-url <- "https://raw.githubusercontent.com/pfmc-assessments/indexwc/main/data-raw/configuration.csv"
-config_data <- read.csv(url, stringsAsFactors = FALSE)
-config_data$max_depth[which(config_data$max_depth=="#NAME?")] = -Inf
-config_data$max_depth <- as.numeric(config_data$max_depth)
-config_data$min_latitude[which(config_data$min_latitude=="#NAME?")] = -Inf
-config_data$min_latitude <- as.numeric(config_data$min_latitude)
-config_data$min_year[which(config_data$min_year=="#NAME?")] = -Inf
-config_data$min_year <- as.numeric(config_data$min_year)
-config_data$max_year[which(config_data$max_year=="#NAME?")] = Inf
-config_data$max_year <- as.numeric(config_data$max_year)
+# This replaces the csv code 
+raw_url <- "https://raw.githubusercontent.com/pfmc-assessments/indexwc/main/data/configuration.rda"
+temp_file <- tempfile(fileext = ".rda")
+download.file(raw_url, temp_file, mode = "wb")
+load(temp_file)
 
-config_data <- dplyr::filter(config_data, source == "NWFSC.Combo")
+config_data <- dplyr::filter(configuration, source == "NWFSC.Combo")
 # add model index
 config_data$index_id <- seq_len(nrow(config_data))
 
-# switch signs on the depth -- negative but pos in data
-config_data$max_depth <- -config_data$max_depth
-config_data$min_depth <- -config_data$min_depth
-# drop out pass_scaled and put in yday instead
-# config_data$formula <- str_replace(config_data$formula,
-#                                    "pass_scaled",
-#                                    "zday + I(zday^2)")
 # replace longnames in family
 config_data$family <- str_replace(config_data$family, "sdmTMB::", "")
 config_data$family <- str_replace(config_data$family, "\\(\\)", "")
@@ -74,14 +62,16 @@ process_species <- function(i) {
   sub <- dplyr::filter(dat, common_name == config_data$species[i])
   sub <- dplyr::mutate(sub, zday = (yday - mean(sub$yday)) / sd(sub$yday))
   sub$pass_scaled <- sub$pass - mean(range(sub$pass)) # -0.5, 0.5
+  # make sure depth is negative, like config file
+  sub$depth_m <- -sub$depth_m
   # apply the year, latitude, and depth filters if used
   sub <- dplyr::filter(sub,
                        latitude_dd >= config_data$min_latitude[i],
                        latitude_dd < config_data$max_latitude[i],
                        year >= config_data$min_year[i],
                        year <= config_data$max_year[i],
-                       depth_m >= config_data$min_depth[i],
-                       depth_m <= config_data$max_depth[i]) |>
+                       depth_m <= config_data$min_depth[i],
+                       depth_m > config_data$max_depth[i]) |>
     dplyr::rename(catch_weight = total_catch_wt_kg)
 
   # make a mesh based on settings in config
@@ -131,8 +121,8 @@ process_species <- function(i) {
       wcgbts_grid <- dplyr::filter(wcgbts_grid,
                                    latitude >= config_data$min_latitude[i],
                                    latitude < config_data$max_latitude[i],
-                                   -depth >= config_data$min_depth[i],
-                                   -depth < config_data$max_depth[i],
+                                   -depth <= config_data$min_depth[i],
+                                   -depth > config_data$max_depth[i],
                                    area_km2_WCGBTS > 0)
       # Add calendar date -- predicting to jul 1
       wcgbts_grid$zday <- (182 - mean(sub$yday)) / sd(sub$yday)
