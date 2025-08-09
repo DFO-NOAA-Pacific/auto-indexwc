@@ -18,7 +18,6 @@ current_batch <- as.numeric(args[1]) # This gets the batch number
 raw_url <- "https://raw.githubusercontent.com/pfmc-assessments/indexwc/main/data/configuration.rda"
 temp_file <- tempfile(fileext = ".rda")
 download.file(raw_url, temp_file, mode = "wb")
-file.exists(temp_file)
 load(temp_file, envir = .GlobalEnv)
 config_data <- dplyr::filter(configuration, source == "NWFSC.Combo")
 unlink(temp_file)
@@ -56,7 +55,6 @@ dat$common_name[which(dat$common_name == "rougheye and blackspotted rockfish")] 
 config_data$batch <- rep(1:num_batches, length.out = nrow(config_data))
 # Filter out only focal batch
 config_data <- dplyr::filter(config_data, batch == current_batch)
-
 # Plan for parallelization (adjust number of workers as needed)
 #plan(multisession, workers = parallel::detectCores() - 1)
 
