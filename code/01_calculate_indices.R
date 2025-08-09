@@ -18,9 +18,11 @@ current_batch <- as.numeric(args[1]) # This gets the batch number
 raw_url <- "https://raw.githubusercontent.com/pfmc-assessments/indexwc/main/data/configuration.rda"
 temp_file <- tempfile(fileext = ".rda")
 download.file(raw_url, temp_file, mode = "wb")
-load(temp_file)
-
+file.exists(temp_file)
+load(temp_file, envir = .GlobalEnv)
 config_data <- dplyr::filter(configuration, source == "NWFSC.Combo")
+unlink(temp_file)
+
 # add model index
 config_data$index_id <- seq_len(nrow(config_data))
 
@@ -232,3 +234,4 @@ process_species <- function(i) {
 for(spp in 1:nrow(config_data)) {
   process_species(spp)
 }
+
