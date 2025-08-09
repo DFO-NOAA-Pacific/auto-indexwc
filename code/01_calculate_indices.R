@@ -117,12 +117,13 @@ process_species <- function(i) {
   if(class(fit) == "sdmTMB" & sum(unlist(san[1:7])) == 7) {
       # make predictions
       wcgbts_grid <- indexwc::california_current_grid
+      wcgbts_grid$depth <- -wcgbts_grid$depth
       # first filter the grid like with the data
       wcgbts_grid <- dplyr::filter(wcgbts_grid,
                                    latitude >= config_data$min_latitude[i],
                                    latitude < config_data$max_latitude[i],
-                                   -depth <= config_data$min_depth[i],
-                                   -depth > config_data$max_depth[i],
+                                   depth <= config_data$min_depth[i],
+                                   depth > config_data$max_depth[i],
                                    area_km2_WCGBTS > 0)
       # Add calendar date -- predicting to jul 1
       wcgbts_grid$zday <- (182 - mean(sub$yday)) / sd(sub$yday)
