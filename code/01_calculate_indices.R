@@ -117,7 +117,7 @@ process_species <- function(i) {
   if(class(fit) == "sdmTMB" & sum(unlist(san[1:7])) == 7) {
       # make predictions
       wcgbts_grid <- indexwc::california_current_grid
-      wcgbts_grid$depth <- -wcgbts_grid$depth
+
       # first filter the grid like with the data
       wcgbts_grid <- dplyr::filter(wcgbts_grid,
                                    latitude >= config_data$min_latitude[i],
