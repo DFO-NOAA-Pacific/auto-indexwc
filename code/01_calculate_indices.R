@@ -125,6 +125,7 @@ process_species <- function(i) {
                                    depth <= config_data$min_depth[i],
                                    depth > config_data$max_depth[i],
                                    area_km2_WCGBTS > 0)
+      print(nrow(wcgbts_grid))
       # Add calendar date -- predicting to jul 1
       wcgbts_grid$zday <- (182 - mean(sub$yday)) / sd(sub$yday)
       wcgbts_grid$pass_scaled <- 0
